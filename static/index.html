@@ -1,32 +1,106 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Airport Investment Agent</title>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<style>
-body{font-family:system-ui;max-width:860px;margin:0 auto;padding:12px;display:flex;flex-direction:column;height:100vh;box-sizing:border-box}
-#log{flex:1;overflow:auto;border:1px solid #ddd;border-radius:8px;padding:10px}
-.u{background:#e8f0fe;padding:8px;border-radius:8px;margin:8px 0;text-align:right}
-.a{background:#f6f6f6;padding:8px;border-radius:8px;margin:8px 0}
-table{border-collapse:collapse;font-size:13px}td,th{border:1px solid #ccc;padding:3px 6px}
-small{color:#666}form{display:flex;gap:6px;margin-top:8px}input{flex:1;padding:10px}
-.chips button{margin:2px;font-size:12px}
-</style></head><body>
-<h3>✈️ Airport Investment Intelligence Agent</h3>
-<div class="chips" id="chips"></div>
-<div id="log"></div>
-<form id="f"><input id="q" placeholder="Ask about airports..." autocomplete="off">
-<button type="button" id="mic" title="Voice input">🎤</button><button>Send</button></form>
-<label><small><input type="checkbox" id="speak"> Read answers aloud</small></label>
-<script>
-let sid=null;const log=document.getElementById('log'),q=document.getElementById('q');
-["Which airports in New England are strong candidates for terminal expansion?","Compare LA and Santa Ana airport congestion levels","What is the percentage of long haul flights out of Anchorage airport?","What is the unmet flight demand in SFO airport and why?","How is the score calculated?"]
-.forEach(t=>{const b=document.createElement('button');b.textContent=t.slice(0,40)+'…';b.onclick=()=>send(t);chips.appendChild(b)});
-function add(c,h){const d=document.createElement('div');d.className=c;d.innerHTML=h;log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
-async function send(t){add('u',t.replace(/</g,'&lt;'));const w=add('a','…');
- try{const r=await (await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:t,session_id:sid})})).json();
- sid=r.session_id;w.innerHTML=marked.parse(r.reply||'(no reply)')+`<small>mode: ${r.mode} · tools: ${r.tools.map(x=>x.name).join(', ')||'none'}</small>`;
- if(document.getElementById('speak').checked)speechSynthesis.speak(new SpeechSynthesisUtterance((r.reply||'').replace(/[|*#_`-]/g,' ')))}
- catch(e){w.textContent='Error: '+e}}
-f.onsubmit=e=>{e.preventDefault();if(q.value.trim()){send(q.value);q.value=''}};
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-if(SR){mic.onclick=()=>{const r=new SR();r.lang='en-US';r.onresult=e=>{q.value=e.results[0][0].transcript;f.requestSubmit()};r.start()}}else mic.style.display='none';
-</script></body></html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Airport Investment Agent</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: system-ui;
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box
+        }
+
+        #log {
+            flex: 1;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px
+        }
+
+        .u {
+            background: #e8f0fe;
+            padding: 8px;
+            border-radius: 8px;
+            margin: 8px 0;
+            text-align: right
+        }
+
+        .a {
+            background: #f6f6f6;
+            padding: 8px;
+            border-radius: 8px;
+            margin: 8px 0
+        }
+
+        table {
+            border-collapse: collapse;
+            font-size: 13px
+        }
+
+        td,
+        th {
+            border: 1px solid #ccc;
+            padding: 3px 6px
+        }
+
+        small {
+            color: #666
+        }
+
+        form {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px
+        }
+
+        input {
+            flex: 1;
+            padding: 10px
+        }
+
+        .chips button {
+            margin: 2px;
+            font-size: 12px
+        }
+    </style>
+</head>
+
+<body>
+    <h3>✈️ Airport Investment Intelligence Agent</h3>
+    <div class="chips" id="chips"></div>
+    <div id="log"></div>
+    <form id="f"><input id="q" placeholder="Ask about airports..." autocomplete="off">
+        <button type="button" id="mic" title="Voice input">🎤</button><button>Send</button>
+    </form>
+    <label><small><input type="checkbox" id="speak"> Read answers aloud</small></label>
+    <script>
+        let sid = null; const log = document.getElementById('log'), q = document.getElementById('q');
+        ["Which airports in New England are strong candidates for terminal expansion?", "Compare LA and Santa Ana airport congestion levels", "What is the percentage of long haul flights out of Anchorage airport?", "What is the unmet flight demand in SFO airport and why?", "How is the score calculated?"]
+            .forEach(t => { const b = document.createElement('button'); b.textContent = t.slice(0, 40) + '…'; b.onclick = () => send(t); chips.appendChild(b) });
+        function add(c, h) { const d = document.createElement('div'); d.className = c; d.innerHTML = h; log.appendChild(d); log.scrollTop = log.scrollHeight; return d }
+        async function send(t)
+        {
+            add('u', t.replace(/</g, '&lt;')); const w = add('a', '…');
+            try
+            {
+                const r = await (await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: t, session_id: sid }) })).json();
+                sid = r.session_id; w.innerHTML = marked.parse(r.reply || '(no reply)') + `<small>mode: ${r.mode} · tools: ${r.tools.map(x => x.name).join(', ') || 'none'}</small>`;
+                if (document.getElementById('speak').checked) speechSynthesis.speak(new SpeechSynthesisUtterance((r.reply || '').replace(/[|*#_`-]/g, ' ')))
+            }
+            catch (e) { w.textContent = 'Error: ' + e }
+        }
+        f.onsubmit = e => { e.preventDefault(); if (q.value.trim()) { send(q.value); q.value = '' } };
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SR) { mic.onclick = () => { const r = new SR(); r.lang = 'en-US'; r.onresult = e => { q.value = e.results[0][0].transcript; f.requestSubmit() }; r.start() } } else mic.style.display = 'none';
+    </script>
+</body>
+
+</html>

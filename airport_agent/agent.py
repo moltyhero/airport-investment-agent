@@ -35,7 +35,7 @@ class Agent:
         if api_key:
             from openai import OpenAI
             self.client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self.model = os.getenv("OPENAI_MODEL", "gpt-6-luna")
 
     @property
     def mode(self):
