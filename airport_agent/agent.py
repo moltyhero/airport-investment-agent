@@ -5,6 +5,7 @@ import re
 
 from pathlib import Path
 
+from . import data_sources as ds
 from . import scoring as sc
 from . import tools
 
@@ -19,8 +20,10 @@ SYSTEM = """You are an investment-research analyst assistant for a firm investin
 Rules:
 - ALWAYS get numbers via the tools; never invent traffic, delay or route figures.
 - Explain reasoning: cite the score components and raw metrics behind any ranking.
-- Always state assumptions, data freshness, and uncertainty. The universe is a curated list of 41 US airports;
-  traffic values are approximate seed data; 'unmet demand' is a proxy; long-haul share is by route count, not flights.
+- Always state assumptions, data freshness, and uncertainty. The universe is all US commercial airports above
+  a size cutoff (FAA/BTS data, 2023-2025); 'unmet demand' is a proxy (never directly measurable); long-haul share is
+  by actual domestic passenger-carrier departures (no cargo/international); constraints are curated for 13 airports only.
+- Do not add facts about airports (runway layouts, caps, history) that are not in tool output.
 - If a tool returns an error or the question is out of scope, say so plainly rather than guessing.
 - Be concise (use short tables/bullets). Support follow-ups using the conversation context."""
 
@@ -66,7 +69,7 @@ class Agent:
     # ---------- offline path ----------
     def _find_airports(self, text):
         found, up = [], text.upper()
-        for alias, code in sorted(sc.ALIASES.items(), key=lambda x: -len(x[0])):
+        for alias, code in sorted(sc.aliases().items(), key=lambda x: -len(x[0])):
             if re.search(rf"\b{re.escape(alias)}\b", up) and code not in found:
                 found.append(code)
         for tok in re.findall(r"\b[A-Z]{3}\b", text):
@@ -134,19 +137,21 @@ def fmt_rank(r, region):
         return _err(r)
     rows = r["ranking"]
     out = [f"**Top terminal-expansion candidates{' in ' + region.title() if region else ''}** (opportunity score 0-100)\n",
-           "| # | Airport | Score | Growth | Pressure | Scale | Delay now | Feasibility |", "|--|--|--|--|--|--|--|--|"]
+           "| # | Airport | Score | Growth | Pressure | Scale | Hist. delay | Feasibility |", "|--|--|--|--|--|--|--|--|"]
     for i, s in enumerate(rows, 1):
-        c = s["components"]
+        c = {k: ("n/a" if v is None else v) for k, v in s["components"].items()}
         out.append(f"| {i} | {s['iata']} ({s['city']}) | **{s['opportunity_score']}** | {c['growth']} | "
                    f"{c['pressure']} | {c['scale']} | {c['delay']} | {c['feasibility']} |")
-    top = rows[0]
-    out.append(f"\n**Why {top['iata']} leads:** {top['raw']['ops_per_runway']:,} ops/runway over {top['raw']['runways']} "
-               f"runway(s), {top['raw']['cagr_2019_2023_pct']}%/yr enplanement growth vs 2019, "
-               f"{top['raw']['enplanements_2023_m']}M enplanements (2023).")
+    top, tr = rows[0], rows[0]["raw"]
+    opr = f"{tr['ops_per_runway']:,} est. ops/runway over " if tr["ops_per_runway"] else ""
+    out.append(f"\n**Why {top['iata']} leads:** {opr}{tr['runways']} runway(s), {tr['growth_cagr_pct']}%/yr "
+               f"enplanement growth since 2023, {tr['enplanements_m']}M enplanements ({tr['year']}).")
     if top["opportunity_score"] < 50:
         out.append("\n⚠️ **No airport here scores strongly** (best < 50 vs the national peer set). Scores are relative; "
-                   "'best of a modest set' is not the same as 'strong candidate'. 2019->2023 growth is also depressed "
-                   "by the pandemic baseline.")
+                   "'best of a modest set' is not the same as 'strong candidate'.")
+    if any(s["missing_components"] for s in rows):
+        out.append("\n_n/a = no data (BTS delay cache not built, or no curated constraint data); that component is "
+                   "left out and the other weights are renormalised._")
     for s in rows:
         if s["constraint_note"]:
             out.append(f"- ⚠️ {s['iata']}: {s['constraint_note']}")
@@ -160,16 +165,18 @@ def fmt_compare(r):
     rows = r["comparison"]
     out = ["| Metric | " + " | ".join(s["iata"] for s in rows) + " |", "|--|" + "--|" * len(rows)]
     for label, f in [("Congestion index (0-100)", lambda s: s["congestion_index"]),
-                     ("Ops per runway", lambda s: f"{s['raw']['ops_per_runway']:,}"),
+                     ("Est. ops per runway", lambda s: f"{s['raw']['ops_per_runway']:,}" if s['raw']['ops_per_runway'] else "n/a"),
                      ("Runways", lambda s: s["raw"]["runways"]),
-                     ("Enplanements 2023 (M)", lambda s: s["raw"]["enplanements_2023_m"]),
-                     ("Growth CAGR vs 2019 (%)", lambda s: s["raw"]["cagr_2019_2023_pct"]),
+                     ("Enplanements, latest yr (M)", lambda s: s["raw"]["enplanements_m"]),
+                     ("Growth CAGR since 2023 (%)", lambda s: s["raw"]["growth_cagr_pct"]),
+                     ("Departures 15+ min late (%)", lambda s: s["raw"]["delayed_15min_pct"] or "n/a"),
+                     ("Avg taxi-out (min)", lambda s: s["raw"]["taxi_out_min"] or "n/a"),
                      ("Unmet-demand index", lambda s: s["unmet_demand_index"]),
                      ("Opportunity score", lambda s: s["opportunity_score"]),
                      ("Live FAA status", lambda s: (s["live_status"] or {}).get("program", "normal"))]:
         out.append(f"| {label} | " + " | ".join(str(f(s)) for s in rows) + " |")
     hi = max(rows, key=lambda s: s["congestion_index"])
-    out.append(f"\n**{hi['iata']} is more congested** on this index (capacity pressure vs peers, plus live delays).")
+    out.append(f"\n**{hi['iata']} is more congested** on this index (capacity pressure + historical delays, {ds.BTS_LABEL}).")
     for s in rows:
         if s["constraint_note"]:
             out.append(f"- {s['iata']}: {s['constraint_note']}")
@@ -180,10 +187,8 @@ def fmt_compare(r):
 def fmt_longhaul(r):
     if _err(r):
         return _err(r)
-    return (f"**{r['iata']}: {r['pct_long_haul_routes']}% of airline routes are long haul** (>= {r['threshold_mi']:.0f} mi; "
-            f"{r['airline_routes']} routes to {r['destinations']} destinations; "
-            f"{r['pct_long_haul_destinations']}% of destinations).\n\nLongest destinations: "
-            f"{', '.join(r['long_haul_destinations']) or 'none'}\n\n**Caveats**\n"
+    return (f"**{r['iata']}: {r['pct_long_haul_flights']}% of departures are long haul** (>= {r['threshold_mi']:.0f} mi; "
+            f"{r['long_haul_flights']:,} of {r['flights_counted']:,} flights, {r['months']} month(s), {ds.BTS_LABEL}).\n\n**Caveats**\n"
             + "\n".join(f"- {c}" for c in r["caveats"]))
 
 

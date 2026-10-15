@@ -1,0 +1,14 @@
+iata,constraint,constraint_note
+BOS,0.3,Dense urban site; limited land and noise-sensitive neighbors
+LAX,0.4,Land-locked; community opposition; major landside modernization already under way
+SNA,0.8,Settlement-agreement passenger cap (~10.8M annual passengers) and nighttime curfew
+BUR,0.6,Curfew; terminal replacement already approved
+LGB,0.8,City ordinance caps commercial flights at ~50 daily slots
+SFO,0.5,Crossing parallel runways reduce arrival rates in low visibility; bay fill and noise limits on new runways
+SJC,0.4,Night-time noise restrictions
+JFK,0.3,Major redevelopment already funded
+LGA,0.6,Perimeter rule and slot controls; tiny footprint
+EWR,0.4,Slot-controlled; new Terminal A opened 2022
+FLL,0.4,Short main runway; constrained site
+DCA,0.9,Perimeter rule; slot controls; single main runway; tiny site
+SAN,0.7,Single runway; curfew; hemmed in by city
